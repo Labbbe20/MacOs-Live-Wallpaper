@@ -127,11 +127,12 @@ enum QuickTime {
         guard mvhd.first == 0, try mvhd.u32(12) == 600, try mvhd.u32(16) == 1800 else {
             throw WallpaperError.format
         }
-        try mvhd.set32(mvhd.count - 4, 5)
-
         let donorMedia = try Atom.one("mdat", in: donor)
         let tracks = try Atom.scan(Atom.get(donor, ["moov"])).filter { $0.tag == "trak" }
-        guard tracks.count == 3 else { throw WallpaperError.format }
+        // The public profile has two metadata tracks. A locally supplied
+        // profile can also retain the third orientation track.
+        guard (2...3).contains(tracks.count) else { throw WallpaperError.format }
+        try mvhd.set32(mvhd.count - 4, UInt32(tracks.count + 2))
         let offsetDelta = top[2].end - donorMedia.contentStart
         var newTracks = Data()
         for (index, track) in tracks.enumerated() {
