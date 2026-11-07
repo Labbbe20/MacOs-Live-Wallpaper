@@ -8,14 +8,9 @@ Das Videoprofil basiert auf einem am iPhone getesteten Wallpaper. Die App hält 
 
 Fertige DMGs für Apple Silicon (macOS 14 oder neuer) stehen unter [Releases](https://github.com/Labbbe20/MacOs-Live-Wallpaper/releases). Die App enthält den Encoder und ein aus einer [öffentlichen MIT-Vorlage](https://github.com/tmfadhlul/apple-video-to-livephotos/tree/d0c2bf897962762fde4f1e0a1ec78a7948ff0567/templates) abgeleitetes Metadatenprofil. Diese Vorlage ist unabhängig von dem lokalen Profil aus dem ursprünglichen iPhone-Test. Die App ist lokal signiert und nicht von Apple notarisiert.
 
-Ein gepushter Versions-Tag startet [Build macOS DMG](.github/workflows/release.yml). Nach erfolgreicher Prüfung hängt die Action die DMG, ihre SHA-256-Datei und die Encoder-Quellen an den GitHub-Release:
+Jeder Push auf `main` startet [Build macOS DMG](.github/workflows/release.yml). Nach erfolgreicher Prüfung legt die Action einen Versions-Tag für den gebauten Commit und einen öffentlichen GitHub-Release an. Die DMG, ihre SHA-256-Datei und die Encoder-Quellen stehen dann unter **Assets**. Die automatische Version lautet `v1.0.<Workflow-Nummer>`.
 
-```sh
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-Tagge den Commit, der den Workflow bereits enthält. Tags wie `v1.0.0-beta.1` erzeugen einen Vorab-Release. Über **Actions → Build macOS DMG → Run workflow** kann man den Build ohne Veröffentlichung testen; die Dateien stehen dann als Workflow-Artefakt bereit.
+Manuell: **Actions → Build macOS DMG → Run workflow → Branch: main → Run workflow**. Optional lässt sich eine freie Version wie `v1.0.0` angeben. Wer nur einen Build testen will, deaktiviert **Publish a public GitHub Release**; das Ergebnis steht dann als Workflow-Artefakt bereit.
 
 ## Bauen
 
