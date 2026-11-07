@@ -4,6 +4,19 @@ Eine macOS-App, die aus einem Video ein Live Photo für den iPhone-Sperrbildschi
 
 Das Videoprofil basiert auf einem am iPhone getesteten Wallpaper. Die App hält das Hochformatprofil, den Schlüsselfoto-Zeitpunkt und die zeitgesteuerten Metadaten ein. Sie legt den sichtbaren Aufbau in die letzten 0,3 Sekunden vor dem Schlüsselfoto. Ob iOS die Bewegung für ein bestimmtes Motiv freigibt, lässt sich erst am Gerät prüfen.
 
+## Download und Releases
+
+Fertige DMGs für Apple Silicon (macOS 14 oder neuer) stehen unter [Releases](https://github.com/Labbbe20/MacOs-Live-Wallpaper/releases). Die App enthält den Encoder und ein aus einer [öffentlichen MIT-Vorlage](https://github.com/tmfadhlul/apple-video-to-livephotos/tree/d0c2bf897962762fde4f1e0a1ec78a7948ff0567/templates) abgeleitetes Metadatenprofil. Diese Vorlage ist unabhängig von dem lokalen Profil aus dem ursprünglichen iPhone-Test. Die App ist lokal signiert und nicht von Apple notarisiert.
+
+Ein gepushter Versions-Tag startet [Build macOS DMG](.github/workflows/release.yml). Nach erfolgreicher Prüfung hängt die Action die DMG, ihre SHA-256-Datei und die Encoder-Quellen an den GitHub-Release:
+
+```sh
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+Tagge den Commit, der den Workflow bereits enthält. Tags wie `v1.0.0-beta.1` erzeugen einen Vorab-Release. Über **Actions → Build macOS DMG → Run workflow** kann man den Build ohne Veröffentlichung testen; die Dateien stehen dann als Workflow-Artefakt bereit.
+
 ## Bauen
 
 Benötigt werden macOS 14 oder neuer, Xcode Command Line Tools und ein eigenständiges FFmpeg für die passende Mac-Architektur mit `libx265` und `zscale`. Wenn du die Metadatenvorlage aus einem MOV gewinnen willst, brauchst du zusätzlich Python 3.10 oder neuer.
