@@ -1,0 +1,109 @@
+name: Build macOS DMG
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-dmg-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build Apple Silicon app and DMG
+    runs-on: macos-15
+    timeout-minutes: 45
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Validate version
+        id: version
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [[ "$REF_TYPE" == tag ]]; then
+            tag="$REF_NAME"
+          else
+            tag="v0.0.0-test"
+          fi
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Use a version tag such as v1.0.0 or v1.0.0-beta.1"
+            exit 1
+          fi
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Install encoder build tools
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: brew install cmake pkgconf autoconf automake libtool
+
+      - name: Build and verify DMG
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: bash tools/build-release.sh "$RELEASE_TAG" "$RUNNER_TEMP/release-assets"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: macos-release
+          path: ${{ runner.temp }}/release-assets/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: macos-release
+          path: release-assets
+
+      - name: Attach DMG, checksum and encoder sources
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          cd release-assets
+          base="MacOs-Live-Wallpaper-$RELEASE_TAG-arm64"
+          files=("$base.dmg" "$base.dmg.sha256" "$base-encoder-source.tar.gz")
+          sha256sum --check "$base.dmg.sha256"
+          for file in "${files[@]}"; do test -s "$file"; done
+
+          if gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/asset-names"; then
+            count=0
+            for file in "${files[@]}"; do
+              if grep -Fxq -- "$file" "$RUNNER_TEMP/asset-names"; then count=$((count+1)); fi
+            done
+            if [[ "$count" == 3 ]]; then
+              echo "The release already contains all three assets."
+            elif [[ "$count" == 0 ]]; then
+              gh release upload "$RELEASE_TAG" "${files[@]}"
+            else
+              echo "::error::This release has an incomplete asset set. Existing downloads were not replaced."
+              exit 1
+            fi
+          else
+            flags=(--verify-tag --generate-notes)
+            if [[ "$RELEASE_TAG" == *-* ]]; then flags+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" "${files[@]}" "${flags[@]}" \
+              --notes 'Apple Silicon, macOS 14+. The app is ad-hoc signed and is not Apple-notarized.'
+          fi
