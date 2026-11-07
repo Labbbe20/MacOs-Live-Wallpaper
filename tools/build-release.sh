@@ -59,7 +59,8 @@ cmake --install "$work/x265-build"
 (
     cd "$work/zimg-release-3.0.6"
     ./autogen.sh
-    ./configure --prefix="$prefix" --disable-shared --enable-static
+    CFLAGS="-O2" CXXFLAGS="-O2" STL_LIBS="-lc++" \
+        ./configure --prefix="$prefix" --disable-shared --enable-static
     make -j"$jobs"
     make install
 )
