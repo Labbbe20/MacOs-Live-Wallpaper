@@ -2,20 +2,26 @@ name: Build macOS DMG
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Optional version tag, e.g. v1.0.0. Leave empty to number automatically.'
+        type: string
+        required: false
+      publish_release:
+        description: 'Publish a public GitHub Release (uncheck for a test artifact only).'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
 
-concurrency:
-  group: macos-dmg-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
   build:
     name: Build Apple Silicon app and DMG
+    if: github.ref == 'refs/heads/main'
     runs-on: macos-15
     timeout-minutes: 45
     outputs:
@@ -29,16 +35,12 @@ jobs:
         id: version
         shell: bash
         env:
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
-          if [[ "$REF_TYPE" == tag ]]; then
-            tag="$REF_NAME"
-          else
-            tag="v0.0.0-test"
-          fi
+          tag="${REQUESTED_VERSION:-v1.0.$RUN_NUMBER}"
           if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "::error::Use a version tag such as v1.0.0 or v1.0.0-beta.1"
+            echo "::error::Use a version like v1.0.0 or v1.0.0-beta.1."
             exit 1
           fi
           printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
@@ -63,7 +65,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.publish_release)
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -80,6 +82,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           cd release-assets
@@ -87,6 +90,23 @@ jobs:
           files=("$base.dmg" "$base.dmg.sha256" "$base-encoder-source.tar.gz")
           sha256sum --check "$base.dmg.sha256"
           for file in "${files[@]}"; do test -s "$file"; done
+
+          # Create the tag for the exact commit that was built. A rerun can
+          # reuse this tag, but may never attach a new build to a different commit.
+          error_file="$RUNNER_TEMP/tag-error"
+          if ref=$(gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" \
+            --jq '[.object.type, .object.sha] | @tsv' 2>"$error_file"); then
+            if [[ "$ref" != $'commit\t'"$RELEASE_SHA" ]]; then
+              echo "::error::Tag $RELEASE_TAG already points to a different commit or is not a lightweight tag."
+              exit 1
+            fi
+          elif grep -Fq 'HTTP 404' "$error_file"; then
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$RELEASE_SHA" > /dev/null
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
 
           if gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/asset-names"; then
             count=0
